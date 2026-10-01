@@ -28,7 +28,8 @@ cp .env.example .env
 docker compose up --build --wait
 ```
 
-Postgres comes up on port 5435, the API on 8000. Alembic migrates the schema
+Postgres comes up on port 5435, the API on 8000, both bound to `127.0.0.1`
+only: the demo password and key in `.env.example` are public. Alembic migrates the schema
 before the server takes traffic, and the API container only starts once the
 database reports healthy. Interactive docs are at http://localhost:8000/docs.
 
@@ -90,6 +91,13 @@ header; a missing or wrong key is `401`. The key is compared with
 `hmac.compare_digest`, so the time a wrong key takes to reject does not leak how
 much of it was right.
 
+An upload is turned away before its body is read. FastAPI parses the whole
+multipart body before any dependency runs, so a check in the endpoint alone
+would come after a 200 MB file had been received. A small ASGI middleware
+answers `401` for a missing or wrong key and `413` for a `Content-Length` over
+the limit without reading the body, and cuts off a body sent without a length
+as soon as it passes the limit.
+
 ## Design choices
 
 - **Synchronous SQLAlchemy.** Each request is one short transaction and the
@@ -103,15 +111,17 @@ much of it was right.
 - **The output CSVs are stored as text** in `run_files`, so a download a month
   later is the same bytes the engine produced, even after the engine changes.
 - **Schema by Alembic migrations**, never `create_all`; the test suite builds
-  its database with the same migration, and `alembic check` confirms the
-  models and the migration agree.
+  its database with the same migration, and `alembic check` in CI confirms
+  the models and the migration agree.
 
 ## Tests and numbers
 
-All numbers below are printed by a command and re-checked by `python check.py`;
-none is typed by hand.
+All numbers below are printed by a command; none is typed by hand.
+`python check.py` reruns the tests and coverage and compares them with this
+page. The load numbers are a saved measurement: `check.py` confirms this page
+matches `docs/load-check.txt`, and `python scripts/load_check.py` remeasures.
 
-- **43 pytest tests**, all on a real Postgres (a throwaway `feedaudit_test`
+- **53 pytest tests**, all on a real Postgres (a throwaway `feedaudit_test`
   database, built by the Alembic migration), none on SQLite. They include the
   cases that should fail: an unreadable feed, an empty file, a binary file, a
   file one byte over the limit, no key and a wrong key on every protected route,
@@ -138,8 +148,8 @@ docker compose up -d db --wait
 .venv/bin/python check.py
 ```
 
-CI (`.github/workflows/ci.yml`) runs ruff, the tests against a Postgres
-service with an 85% coverage floor, the image build, and `docker compose up
+CI (`.github/workflows/ci.yml`) runs ruff, the migrations and `alembic
+check`, the tests against a Postgres service with an 85% coverage floor, the image build, and `docker compose up
 --wait` followed by a request to `/health`. Every action is pinned to a commit
 SHA.
 
@@ -161,6 +171,21 @@ SHA.
   both flagged `check.py`. The two lines are now generated with the escapes
   kept as escapes, and the gate passes on a file it can read.
 
+Found by two independent reviews before publishing, each fixed with a test
+that fails without the fix:
+
+- **The size limit came after the upload.** The endpoint read at most 5 MB of
+  the file, but FastAPI had already spooled the whole multipart body, even for
+  a request with no key. A 200 MB upload without a key was refused only after
+  it had been received in full. The middleware above now refuses it first.
+- **An id above 2,147,483,647 was a 500.** Postgres `INTEGER` overflowed inside
+  the query. Path ids and the paging cursor are now bounded, so it is a `422`.
+- **Two products could merge into one.** The engine grouped rows by Shopify
+  handle, and SKUs `A/B` and `A-B` both make `a-b`: the second product became a
+  variant of the first and lost its title with no finding. The engine now
+  groups by SKU, suffixes the clashing handle and reports the clash. A field
+  over Python's CSV size limit also crashed the reader; it is a `422` now.
+
 ## Honest limits
 
 - **The engine commit this pins is not on GitHub yet.** Until it is pushed,
@@ -168,8 +193,11 @@ SHA.
   fetch it, and CI will fail at install. Locally, install the engine from a
   checkout (`pip install -e ../feed-to-matrixify`) and set
   `ENGINE_CONTEXT=../feed-to-matrixify` in `.env` for the image build.
-- The whole upload is read into memory; that is why there is a 5 MB limit. A
-  multi-hundred-megabyte feed would need streaming the engine does not do.
+- An accepted upload is read into memory; that is why there is a 5 MB limit,
+  enforced before the body is received. A multi-hundred-megabyte feed would
+  need streaming the engine does not do.
+- The demo key and database password are defaults for a local run. Exposing
+  the stack beyond `localhost` means setting both in `.env` first.
 - Idempotency is by exact bytes. The same feed re-saved with different line
   endings or a different column order is a new run.
 - One shared API key, no users, no rate limiting, no way to delete a run.

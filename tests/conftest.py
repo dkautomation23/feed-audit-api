@@ -31,6 +31,9 @@ SAMPLE = ROOT / "sample" / "supplier-feed.csv"
 @pytest.fixture(scope="session", autouse=True)
 def database():
     url = make_url(TEST_DATABASE_URL)
+    # This drops and recreates the database it is given; never let it be a real one.
+    if not (url.database or "").endswith("_test"):
+        pytest.exit(f"TEST_DATABASE_URL must name a database ending in _test, not {url.database!r}", 2)
     admin = create_engine(url.set(database="postgres"), isolation_level="AUTOCOMMIT")
     with admin.connect() as conn:
         conn.execute(text(f'DROP DATABASE IF EXISTS "{url.database}" WITH (FORCE)'))

@@ -3,11 +3,15 @@
 import hmac
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Query, Response, UploadFile, status
+from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 from feed_to_matrixify.audit import summarise
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
+from starlette.datastructures import Headers
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app import service
 from app.config import get_settings
@@ -16,19 +20,77 @@ from app.models import Finding, Run, RunFile
 from app.schemas import FindingOut, FindingStat, Health, RunCreated, RunOut, RunPage
 
 SessionDep = Annotated[Session, Depends(get_session)]
+# Ids are Postgres INTEGER: anything above this is a 422, not a database error.
+RunId = Annotated[int, Path(ge=1, le=2**31 - 1)]
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+NO_KEY = "missing or wrong X-API-Key"
+NO_KEY_HEADERS = {"WWW-Authenticate": "API-Key"}
+# Room for the multipart boundaries and part headers around the file itself.
+MULTIPART_OVERHEAD = 16 * 1024
+
+
+def key_is_right(key: str | None) -> bool:
+    return key is not None and hmac.compare_digest(key.encode(), get_settings().api_key.encode())
 
 
 def require_api_key(key: Annotated[str | None, Depends(api_key_header)]) -> None:
-    expected = get_settings().api_key.encode()
-    if key is None or not hmac.compare_digest(key.encode(), expected):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing or wrong X-API-Key",
-                            headers={"WWW-Authenticate": "API-Key"})
+    if not key_is_right(key):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, NO_KEY, headers=NO_KEY_HEADERS)
+
+
+class UploadGuard:
+    """Turns an upload away before its body is read.
+
+    FastAPI parses a multipart body, spooling the whole file, before any
+    dependency runs, so the key check and the size check in the endpoint alone
+    would come after a 200 MB upload had been received. This checks the key and
+    the declared Content-Length first, then counts the bytes as they arrive for
+    a body sent without one.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["method"] != "POST" or scope["path"] != "/runs":
+            await self.app(scope, receive, send)
+            return
+        headers = Headers(scope=scope)
+        if not key_is_right(headers.get("x-api-key")):
+            await JSONResponse({"detail": NO_KEY}, status.HTTP_401_UNAUTHORIZED,
+                               headers=NO_KEY_HEADERS)(scope, receive, send)
+            return
+        cap = get_settings().max_upload_bytes + MULTIPART_OVERHEAD
+        declared = headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > cap:
+            await too_large()(scope, receive, send)
+            return
+        received = 0
+
+        async def counted() -> Message:
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > cap:
+                    raise StarletteHTTPException(status.HTTP_413_CONTENT_TOO_LARGE, too_large_detail())
+            return message
+
+        await self.app(scope, counted, send)
+
+
+def too_large_detail() -> str:
+    return f"file is over the {get_settings().max_upload_bytes} byte limit"
+
+
+def too_large() -> JSONResponse:
+    return JSONResponse({"detail": too_large_detail()}, status.HTTP_413_CONTENT_TOO_LARGE)
 
 
 app = FastAPI(title="feed-audit-api", version="0.1.0",
               description="Upload a supplier feed, get a Shopify (Matrixify) import and an audit of "
                           "what is wrong with the feed. Every run is kept in Postgres.")
+app.add_middleware(UploadGuard)
 api = APIRouter(dependencies=[Depends(require_api_key)])
 
 
@@ -57,7 +119,7 @@ def create_run(file: UploadFile, session: SessionDep, response: Response) -> Run
     limit = get_settings().max_upload_bytes
     raw = file.file.read(limit + 1)
     if len(raw) > limit:
-        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, f"file is over the {limit} byte limit")
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, too_large_detail())
     try:
         run, created = service.ingest(session, file.filename or "feed.csv", raw)
     except service.FeedUnreadable as error:
@@ -71,7 +133,8 @@ def create_run(file: UploadFile, session: SessionDep, response: Response) -> Run
 
 @api.get("/runs", response_model=RunPage, tags=["runs"])
 def list_runs(session: SessionDep,
-              after: Annotated[int, Query(ge=0, description="id of the last run on the previous page")] = 0,
+              after: Annotated[int, Query(ge=0, le=2**31 - 1,
+                                          description="id of the last run on the previous page")] = 0,
               limit: Annotated[int, Query(ge=1, le=100)] = 50) -> RunPage:
     runs = session.scalars(select(Run).where(Run.id > after).order_by(Run.id).limit(limit + 1)).all()
     page = runs[:limit]
@@ -80,12 +143,12 @@ def list_runs(session: SessionDep,
 
 
 @api.get("/runs/{run_id}", response_model=RunOut, tags=["runs"])
-def read_run(run_id: int, session: SessionDep) -> Run:
+def read_run(run_id: RunId, session: SessionDep) -> Run:
     return get_run(session, run_id)
 
 
 @api.get("/runs/{run_id}/findings", response_model=list[FindingOut], tags=["runs"])
-def read_findings(run_id: int, session: SessionDep,
+def read_findings(run_id: RunId, session: SessionDep,
                   level: str | None = None, what: str | None = None) -> list[Finding]:
     get_run(session, run_id)
     query = select(Finding).where(Finding.run_id == run_id).order_by(Finding.id)
@@ -105,13 +168,13 @@ def csv_file(session: Session, run_id: int, kind: str, name: str) -> Response:
 
 @api.get("/runs/{run_id}/matrixify.csv", tags=["runs"], response_class=Response,
          responses={200: {"content": {"text/csv": {}}}})
-def matrixify_csv(run_id: int, session: SessionDep) -> Response:
+def matrixify_csv(run_id: RunId, session: SessionDep) -> Response:
     return csv_file(session, run_id, "matrixify", "matrixify-import.csv")
 
 
 @api.get("/runs/{run_id}/report.csv", tags=["runs"], response_class=Response,
          responses={200: {"content": {"text/csv": {}}}})
-def report_csv(run_id: int, session: SessionDep) -> Response:
+def report_csv(run_id: RunId, session: SessionDep) -> Response:
     return csv_file(session, run_id, "report", "audit-report.csv")
 
 

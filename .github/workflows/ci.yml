@@ -36,6 +36,10 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - name: Lint
         run: ruff check .
+      - name: Migrations apply and match the models
+        env:
+          DATABASE_URL: postgresql+psycopg://feedaudit:feedaudit@localhost:5435/feedaudit
+        run: alembic upgrade head && alembic check
       - name: Tests on Postgres, with coverage
         run: python -m pytest -q --cov=app --cov-report=term --cov-fail-under=85
 
@@ -47,7 +51,7 @@ jobs:
       - name: Build the image
         run: >-
           docker build
-          --build-context engine=https://github.com/dkautomation23/feed-to-matrixify.git#4f2a06cf054b21f23164399139cb7a5db72b6457
+          --build-context engine=https://github.com/dkautomation23/feed-to-matrixify.git#1df16d9fc7d90655bcec17dcb65f0a328c63ec87
           -t feed-audit-api .
       - name: Start the stack and wait for both healthchecks
         run: docker compose up -d --build --wait

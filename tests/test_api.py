@@ -1,9 +1,10 @@
+import asyncio
 import re
 import subprocess
 import sys
 
 import pytest
-from conftest import SAMPLE, UPLOAD_LIMIT, small_feed, upload
+from conftest import API_KEY, SAMPLE, UPLOAD_LIMIT, small_feed, upload
 from sqlalchemy import func, select
 
 from app import service
@@ -149,7 +150,82 @@ def test_a_file_exactly_at_the_limit_is_read(client):
     feed = small_feed(1)
     padded = feed + b"#" * (UPLOAD_LIMIT - len(feed))
     assert len(padded) == UPLOAD_LIMIT
-    assert upload(client, padded).status_code != 413
+    assert upload(client, padded).status_code == 201
+
+
+class Body:
+    """A multipart body sent chunk by chunk, counting how much the server pulled."""
+
+    def __init__(self, megabytes: int):
+        self.sent = 0
+        self.megabytes = megabytes
+        self.boundary = "bound"
+
+    def __iter__(self):
+        yield f'--{self.boundary}\r\nContent-Disposition: form-data; name="file"; filename="big.csv"\r\n\r\n'.encode()
+        for _ in range(self.megabytes * 16):
+            self.sent += 1
+            yield b"#" * 65536
+        yield f"\r\n--{self.boundary}--\r\n".encode()
+
+    def headers(self, key: str | None = API_KEY, length: bool = False) -> dict:
+        headers = {"Content-Type": f"multipart/form-data; boundary={self.boundary}"}
+        if key:
+            headers["X-API-Key"] = key
+        if length:
+            headers["Content-Length"] = str(self.megabytes * 1024 * 1024 + 200)
+        return headers
+
+
+def test_an_upload_declared_over_the_limit_is_413_before_its_body_is_read(anon):
+    body = Body(megabytes=200)
+    response = anon.post("/runs", content=body, headers=body.headers(length=True))
+    assert response.status_code == 413
+    assert body.sent < 16, f"server read {body.sent} of {body.megabytes * 16} chunks before refusing"
+
+
+def test_an_undeclared_upload_is_cut_off_once_it_passes_the_limit():
+    """Chunked, no Content-Length. Called as ASGI directly: the test client
+    buffers a streamed body before the app sees it, so it cannot show this."""
+    body = Body(megabytes=200)
+    chunks = iter(body)
+    sent: list = []
+
+    async def receive():
+        return {"type": "http.request", "body": next(chunks), "more_body": True}
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST",
+             "scheme": "http", "path": "/runs", "raw_path": b"/runs", "query_string": b"",
+             "root_path": "", "server": ("test", 80), "client": ("test", 1),
+             "headers": [(k.lower().encode(), v.encode()) for k, v in body.headers().items()]}
+    asyncio.run(app(scope, receive, send))
+    assert sent[0]["type"] == "http.response.start"
+    assert sent[0]["status"] == 413
+    # 64 KiB limit plus multipart overhead: refused on the second chunk, not the 3200th.
+    assert body.sent < 16, f"server read {body.sent} of {body.megabytes * 16} chunks before refusing"
+    with get_engine().connect() as conn:
+        assert conn.scalar(select(func.count()).select_from(Run)) == 0
+
+
+@pytest.mark.parametrize("key", [None, "test-key-but-wrong"])
+def test_an_upload_with_no_or_a_wrong_key_is_401_before_its_body_is_read(anon, key):
+    body = Body(megabytes=200)
+    response = anon.post("/runs", content=body, headers=body.headers(key=key, length=True))
+    assert response.status_code == 401
+    assert body.sent < 16
+
+
+@pytest.mark.parametrize("path", ["/runs/2147483648", "/runs/99999999999999999999/findings",
+                                  "/runs/2147483648/matrixify.csv", "/runs/0", "/runs?after=2147483648"])
+def test_an_id_postgres_cannot_hold_is_422_not_500(client, path):
+    assert client.get(path).status_code == 422
+
+
+def test_the_largest_id_postgres_can_hold_is_a_plain_404(client):
+    assert client.get("/runs/2147483647").status_code == 404
 
 
 def test_an_upload_without_a_file_is_422(client):
