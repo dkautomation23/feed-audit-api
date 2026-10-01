@@ -138,8 +138,9 @@ def test_a_binary_file_is_422_not_a_crash(client):
     assert "NUL bytes" in response.json()["detail"]
 
 
-def test_a_file_over_the_limit_is_413_and_not_stored(client):
-    response = upload(client, small_feed(1) + b"x" * UPLOAD_LIMIT)
+def test_a_file_one_byte_over_the_limit_is_413_and_not_stored(client):
+    feed = small_feed(1)
+    response = upload(client, feed + b"#" * (UPLOAD_LIMIT + 1 - len(feed)))
     assert response.status_code == 413
     assert client.get("/runs").json()["items"] == []
 

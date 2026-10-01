@@ -14,6 +14,7 @@ ignore = ["B008"]  # FastAPI declares dependencies as default arguments
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "S603", "S608"]
 "scripts/*" = ["S311"]  # synthetic data, not cryptography
+"check.py" = ["S310", "S603", "S607"]  # calls the local API, git, docker and the scanners by design
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
