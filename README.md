@@ -155,6 +155,11 @@ SHA.
   changes the sample feed's bytes, so its sha256 and every byte-for-byte
   comparison, and breaks shell lines inside the Linux image. `.gitattributes`
   now keeps LF and marks `*.csv` as data that is never normalised.
+- **The release gate failed on itself.** `check.py` looks for Cyrillic text with
+  a `\u0400-\u04ff` range, and the tool that wrote the file turned those escapes
+  into the literal characters. Its own hygiene check and the privacy scanner
+  both flagged `check.py`. The two lines are now generated with the escapes
+  kept as escapes, and the gate passes on a file it can read.
 
 ## Honest limits
 
