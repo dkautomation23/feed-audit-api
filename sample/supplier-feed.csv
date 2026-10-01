@@ -1,0 +1,21 @@
+Art-Nr;Bezeichnung;Variante;Preis EUR;UVP;Bestand;Hersteller;Bild-URL;EAN;Warengruppe
+TK-1001;Precision Kitchen Thermometer;Red;24,90;39,90;12;Thermoline;https://example.com/img/tk-1001-red.jpg;4001234567890;Thermometers
+TK-1001;Precision Kitchen Thermometer;Blue;24,90;39,90;7;Thermoline;https://example.com/img/tk-1001-blue.jpg;4001234567891;Thermometers
+TK-1001;Precision Kitchen Thermometer;Green;24,90;39,90;;Thermoline;https://example.com/img/tk-1001-green.jpg;4001234567892;Thermometers
+TK-1002;Infrared Surface Thermometer;;59,00;89,00;3;Thermoline;https://example.com/img/tk-1002.jpg;4001234567893;Thermometers
+TK-1003;Probe Replacement Set;4 probes;18,50;29,90;40;Thermoline;;4001234567894;Accessories
+TK-1004;Digital Timer;;12,00;19,90;25;Thermoline;https://example.com/img/tk-1004.jpg;;Timers
+TK-1005;Vacuum Sealer Bags 20x30;100 pcs;31,00;49,00;8;PackPro;https://example.com/img/tk-1005.jpg;4001234567896;Packaging
+TK-1005;Vacuum Sealer Bags 20x30;200 pcs;54,00;79,00;4;PackPro;https://example.com/img/tk-1005.jpg;4001234567897;Packaging
+TK-1006;Sous Vide Circulator;1200W;189,00;249,00;2;PackPro;https://example.com/img/tk-1006.jpg;4001234567898;Cooking
+TK-1007;Sous Vide Circulator;1500W;229,00;;1;PackPro;https://example.com/img/tk-1007.jpg;4001234567899;Cooking
+TK-1008;Silicone Mat;;9,90;14,90;0;PackPro;https://example.com/img/tk-1008.jpg;4001234567900;Accessories
+TK-1009;Chef Knife 20cm;;74,00;119,00;6;Klingen&Co;https://example.com/img/tk-1009.jpg;4001234567901;Knives
+TK-1010;Chef Knife 20cm;;74,00;119,00;6;Klingen&Co;https://example.com/img/tk-1010.jpg;4001234567902;Knives
+TK-1011;Honing Steel;;22,00;34,90;11;Klingen&Co;http://example.com/img/tk-1011.jpg;4001234567903;Knives
+TK-1012;Cutting Board Walnut;small;45,00;69,00;5;Holzwerk;https://example.com/img/tk-1012-s.jpg;4001234567904;Boards
+TK-1012;Cutting Board Walnut;large;68,00;99,00;3;Holzwerk;https://example.com/img/tk-1012-l.jpg;4001234567905;Boards
+TK-1013;Cutting Board Oak;medium;52,00;0,00;9;Holzwerk;https://example.com/img/tk-1013.jpg;4001234567906;Boards
+TK-1014;Scale 5kg;;28,00;44,90;-3;Holzwerk;https://example.com/img/tk-1014.jpg;4001234567907;Scales
+TK-1015;Scale 15kg;;39,00;59,00;14;Holzwerk;;4001234567908;Scales
+;Unnamed Leftover Item;;5,00;9,90;2;Holzwerk;https://example.com/img/unknown.jpg;;Misc

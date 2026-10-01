@@ -48,11 +48,12 @@ def ingest(session: Session, filename: str, raw: bytes) -> tuple[Run, bool]:
     )
     run.findings = [Finding(level=f.level, row=f.row, sku=f.sku, what=f.what, detail=f.detail)
                     for f in findings]
-    session.add(run)
-    session.flush()
-    session.add_all([RunFile(run_id=run.id, kind="matrixify", content=to_csv(records)),
-                     RunFile(run_id=run.id, kind="report", content=report_csv(findings))])
     try:
+        # The flush is where UNIQUE(sha256) fires, not the commit: both sit inside the try.
+        session.add(run)
+        session.flush()
+        session.add_all([RunFile(run_id=run.id, kind="matrixify", content=to_csv(records)),
+                         RunFile(run_id=run.id, kind="report", content=report_csv(findings))])
         session.commit()
     except IntegrityError:
         # Two uploads of the same file raced; the other one won and its run is the answer.

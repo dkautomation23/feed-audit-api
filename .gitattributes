@@ -1,2 +1,4 @@
 * text=auto eol=lf
+# Feeds are test data: their exact bytes are the input, never normalise them.
+*.csv -text
 *.png binary
