@@ -87,7 +87,8 @@ def main() -> int:
     report = "\n".join(lines) + "\n"
     print(report, end="")
     (ROOT / "docs").mkdir(exist_ok=True)
-    (ROOT / "docs" / "load-check.txt").write_text(report, encoding="utf-8")
+    (ROOT / "docs" / "load-check.txt").write_text(report, encoding="utf-8", newline="
+")
     return 0
 
 
