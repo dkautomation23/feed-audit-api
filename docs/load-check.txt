@@ -1,0 +1,3 @@
+feeds uploaded: 200, findings stored: 3233
+POST /runs: p50 55.3 ms, p95 104.9 ms
+GET /runs/{id}/findings: p50 5.9 ms, p95 9.0 ms
