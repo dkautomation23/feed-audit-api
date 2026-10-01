@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-feedaudit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-feedaudit}
+      POSTGRES_DB: ${POSTGRES_DB:-feedaudit}
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build:
+      context: .
+      additional_contexts:
+        # The engine at the commit requirements.txt pins. Set ENGINE_CONTEXT to a local
+        # checkout (for example ../feed-to-matrixify) to build without GitHub.
+        engine: ${ENGINE_CONTEXT:-https://github.com/dkautomation23/feed-to-matrixify.git#4f2a06cf054b21f23164399139cb7a5db72b6457}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-feedaudit}:${POSTGRES_PASSWORD:-feedaudit}@db:5432/${POSTGRES_DB:-feedaudit}
+      API_KEY: ${API_KEY:-demo-key-change-me}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-5242880}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
