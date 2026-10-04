@@ -51,7 +51,7 @@ jobs:
       - name: Build the image
         run: >-
           docker build
-          --build-context engine=https://github.com/dkautomation23/feed-to-matrixify.git#1df16d9fc7d90655bcec17dcb65f0a328c63ec87
+          --build-context engine=https://github.com/dkautomation23/feed-to-matrixify.git#b9692d938a94af9630ce0fc43cf162b182aaff7e
           -t feed-audit-api .
       - name: Start the stack and wait for both healthchecks
         run: docker compose up -d --build --wait

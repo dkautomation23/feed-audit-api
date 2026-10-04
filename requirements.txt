@@ -8,4 +8,4 @@ pydantic==2.13.5
 pydantic-settings==2.15.0
 python-multipart==0.0.32
 # The engine. Pinned to the commit that added its pyproject.toml.
-feed-to-matrixify @ git+https://github.com/dkautomation23/feed-to-matrixify@1df16d9fc7d90655bcec17dcb65f0a328c63ec87
+feed-to-matrixify @ git+https://github.com/dkautomation23/feed-to-matrixify@b9692d938a94af9630ce0fc43cf162b182aaff7e

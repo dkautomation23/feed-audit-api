@@ -19,7 +19,7 @@ services:
       additional_contexts:
         # The engine at the commit requirements.txt pins. Set ENGINE_CONTEXT to a local
         # checkout (for example ../feed-to-matrixify) to build without GitHub.
-        engine: ${ENGINE_CONTEXT:-https://github.com/dkautomation23/feed-to-matrixify.git#1df16d9fc7d90655bcec17dcb65f0a328c63ec87}
+        engine: ${ENGINE_CONTEXT:-https://github.com/dkautomation23/feed-to-matrixify.git#b9692d938a94af9630ce0fc43cf162b182aaff7e}
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-feedaudit}:${POSTGRES_PASSWORD:-feedaudit}@db:5432/${POSTGRES_DB:-feedaudit}
       API_KEY: ${API_KEY:-demo-key-change-me}
